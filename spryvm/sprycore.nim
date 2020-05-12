@@ -57,9 +57,9 @@ proc addCore*(spry: Interpreter) =
     spry.currentActivation
 
   # Access to nearest BlokActivation
-  nimFunc("blockActivation"):
-    for activation in mapWalk(spry.currentActivation):
-      return BlokActivation(activation)
+  #nimFunc("blockActivation"):
+  #  for activation in mapWalk(spry.currentActivation):
+  #    return BlokActivation(activation)
 
   # Set catcher of given activation
   nimMeth("catcher:"):
