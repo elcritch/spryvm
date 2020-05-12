@@ -52,16 +52,12 @@ type
   EvalModuleWord* = ref object of EvalWord
     module*: Word
   EvalSelfWord* = ref object of EvalW
-  EvalLocalWord* = ref object of EvalW
-  EvalOuterWord* = ref object of EvalW
   EvalArgWord* = ref object of EvalW
 
   GetWord* = ref object of GetW
   GetModuleWord* = ref object of GetWord
     module*: Word
   GetSelfWord* = ref object of GetW
-  GetLocalWord* = ref object of GetW
-  GetOuterWord* = ref object of GetW
   GetArgWord* = ref object of GetW
 
   # And support for keyword syntactic sugar, only used during parsing
@@ -83,7 +79,6 @@ type
   TrueVal* = ref object of BoolVal
   FalseVal* = ref object of BoolVal
 
-  UndefVal* = ref object of Value
   NilVal* = ref object of Value
 
   # Abstract
@@ -180,9 +175,6 @@ method `$`*(self: FalseVal): string =
 method `$`*(self: NilVal): string =
   "nil"
 
-method `$`*(self: UndefVal): string =
-  "undef"
-
 proc `$`*(self: seq[Node]): string =
   self.map(proc(n: Node): string = $n).join(" ")
 
@@ -198,12 +190,6 @@ method `$`*(self: EvalModuleWord): string =
 method `$`*(self: EvalSelfWord): string =
   "@" & self.word
 
-method `$`*(self: EvalLocalWord): string =
-  "." & self.word
-
-method `$`*(self: EvalOuterWord): string =
-  ".." & self.word
-
 method `$`*(self: GetWord): string =
   "$" & self.word
 
@@ -212,12 +198,6 @@ method `$`*(self: GetModuleWord): string =
 
 method `$`*(self: GetSelfWord): string =
   "$@" & self.word
-
-method `$`*(self: GetLocalWord): string =
-  "$." & self.word
-
-method `$`*(self: GetOuterWord): string =
-  "$.." & self.word
 
 method `$`*(self: LitWord): string =
   "'" & self.word
@@ -327,12 +307,6 @@ method hash*(self: NilVal): Hash =
 method `==`*(self: Nilval, other: Node): bool =
   other of NilVal
 
-method hash*(self: UndefVal): Hash =
-  hash(2)
-
-method `==`*(self: Undefval, other: Node): bool =
-  other of UndefVal
-
 method hash*(self: Blok): Hash =
   hash(self.nodes)
 
@@ -375,6 +349,11 @@ proc makeBinding*(self: Map, key: Node, val: Node): Binding =
     result = Binding(key: key, val: val)
     self.bindings[key] = result
 
+proc assignBinding*(self: Map, key: Node, val: Node): Binding =
+  if self.bindings.hasKey(key):
+    result = self.bindings[key]
+    result.val = val
+    result.key = key
 
 # Constructor procs
 proc raiseParseException(msg: string) =
@@ -407,12 +386,6 @@ proc newEvalModuleWord*(s: string): EvalWord =
 proc newEvalSelfWord*(s: string): EvalSelfWord =
   EvalSelfWord(word: s)
 
-proc newEvalLocalWord*(s: string): EvalLocalWord =
-  EvalLocalWord(word: s)
-
-proc newEvalOuterWord*(s: string): EvalOuterWord =
-  EvalOuterWord(word: s)
-
 proc newGetWord*(s: string): GetWord =
   GetWord(word: s)
 
@@ -422,12 +395,6 @@ proc newGetModuleWord*(s: string): GetWord =
 
 proc newGetSelfWord*(s: string): GetSelfWord =
   GetSelfWord(word: s)
-
-proc newGetLocalWord*(s: string): GetLocalWord =
-  GetLocalWord(word: s)
-
-proc newGetOuterWord*(s: string): GetOuterWord =
-  GetOuterWord(word: s)
 
 proc newEvalArgWord*(s: string): EvalArgWord =
   EvalArgWord(word: s)
@@ -477,9 +444,6 @@ proc newValue*(v: bool): BoolVal =
 proc newNilVal*(): NilVal =
   NilVal()
 
-proc newUndefVal*(): UndefVal =
-  UndefVal()
-
 # AST manipulation
 proc add*(self: SeqComposite, n: Node) =
   self.nodes.add(n)
@@ -491,7 +455,7 @@ proc contains*(self: SeqComposite, n: Node): bool =
   self.nodes.contains(n)
 
 proc contains*(self: Map, n: Node): bool =
-  self.bindings.contains(n)
+  self.bindings.hasKey(n)
 
 method concat*(self: SeqComposite, nodes: seq[Node]): SeqComposite {.base.} =
   raiseRuntimeException("Should not happen..." & $self & " " & $nodes)
@@ -654,8 +618,9 @@ proc newWord(self: Parser, token: string): Node =
   let len = token.len
   let first = token[0]
 
+  #echo "Token: " & $token
   # All arg words (unique for Spry) are preceded with ":"
-  if first == ':' and len > 1:
+  if first == ':' and len > 1 and token[1] != '=':
     if token[1] == '$':
       if token.len < 3:
         raiseParseException("Malformed get argword, missing at least 1 character")
@@ -672,18 +637,6 @@ proc newWord(self: Parser, token: string): Node =
         return newGetSelfWord(token[2..^1])
       else:
         raiseParseException("Malformed self lookup word, missing at least 1 character")
-    elif token[1] == '.':
-      # Local or parent
-      if len > 2:
-        if token[2] == '.':
-          if len > 3:
-            return newGetOuterWord(token[3..^1])
-          else:
-            raiseParseException("Malformed parent lookup word, missing at least 1 character")
-        else:
-          return newGetLocalWord(token[2..^1])
-      else:
-        raiseParseException("Malformed parent lookup word, missing at least 2 characters")
     else:
       if token.contains("::"):
         return newGetModuleWord(token[1..^1])
@@ -720,18 +673,6 @@ proc newWord(self: Parser, token: string): Node =
       return newEvalSelfWord(token[1..^1])
     else:
       raiseParseException("Malformed self eval word, missing at least 1 character")
-  elif first == '.':
-    # Local or parent
-    if len > 1:
-      if token[1] == '.':
-        if len > 2:
-          return newEvalOuterWord(token[2..^1])
-        else:
-          raiseParseException("Malformed parent eval word, missing at least 1 character")
-      else:
-        return newEvalLocalWord(token[1..^1])
-    else:
-      raiseParseException("Malformed local eval word, missing at least 1 character")
   else:
     if token.contains("::"):
       return newEvalModuleWord(token)
@@ -783,7 +724,7 @@ proc parse*(self: Parser, str: string): Node =
     # since you can write things like "^x" and "add: 3;" and have it
     # tokenized as "^ x" and "add: 3 ;"
     if self.specialCharDetected and ch in SpecialChars:
-      # Ok, the previos char was a special and this one too, keep collecting...
+      # Ok, the previous char was a special and this one too, keep collecting...
       self.token.add(ch)
     else:
       if self.specialCharDetected:
@@ -885,7 +826,6 @@ type
     modules*: Blok           # Modules for unqualified lookup
     trueVal*: Node
     falseVal*: Node
-    undefVal*: Node
     nilVal*: Node
     emptyBlok*: Blok         # Used as optimization for nodes without tags
     objectTag*: Node         # Tag for Objects
@@ -913,6 +853,7 @@ type
     parent*: Activation
     pos*: int          # Which node we are at
     body*: SeqComposite   # The composite representing code (Blok, Paren, Funk)
+    catcher*: SeqComposite
 
   # We want to distinguish different activations
   BlokActivation* = ref object of Activation
@@ -1031,10 +972,10 @@ proc reset*(self: Activation) =
   self.returned = false
   self.pos = 0
 
-template hasLocals(self: Activation): bool =
-  not (self of ParenActivation)
+template isParenActivation*(self: Activation): bool =
+  self of ParenActivation
 
-template outer(self: Activation): Activation =
+template outer*(self: Activation): Activation =
   if self of FunkActivation:
     # Instead of looking at my parent, which would be the caller
     # we go to the activation where I was created, thus a Funk is a lexical
@@ -1045,32 +986,52 @@ template outer(self: Activation): Activation =
     # not lexical closures.
     self.parent
 
-# Walk maps for lookups and binds. Skips parens since they do not have
+# Walk maps for lookups and binds, starts at given Activation. Skips parens since they do not have
 # locals and uses outer() that will let Funks go to their "lexical parent"
 iterator mapWalk*(first: Activation): Activation =
   var activation = first
   while activation.notNil:
-    while not activation.hasLocals():
+    while activation.isParenActivation:
       activation = activation.outer()
     yield activation
     activation = activation.outer()
+
+# Walk maps for lookups and binds, starts at given Activation. Skips parens since they do not have
+# locals and uses outer() that will let Funks go to their "lexical parent"
+iterator outerWalk*(first: Activation): Activation =
+  var activation = first
+  # First skip over immediate paren activations
+  while activation.isParenActivation:
+    activation = activation.outer()
+  # Then pick parent, unless nil
+  if activation.notNil:
+    activation = activation.outer()
+    # Then we start yielding
+    while activation.notNil:
+      yield activation
+      activation = activation.outer()
+      # Skip paren activations
+      while activation.isParenActivation:
+        activation = activation.outer()
+
 
 # Walk activations for pulling arguments, here we strictly use
 # parent to walk only up through the caller chain. Skipping paren activations.
 iterator callerWalk*(first: Activation): Activation =
   var activation = first
   # First skip over immediate paren activations
-  while not activation.hasLocals():
+  while activation.isParenActivation:
     activation = activation.parent
-  # Then pick parent
-  activation = activation.parent
-  # Then we start yielding
-  while activation.notNil:
-    yield activation
+  # Then pick parent, unless nil
+  if activation.notNil:
     activation = activation.parent
-    # Skip paren activations
-    while not activation.hasLocals():
+    # Then we start yielding
+    while activation.notNil:
+      yield activation
       activation = activation.parent
+      # Skip paren activations
+      while activation.isParenActivation:
+        activation = activation.parent
 
 # Methods supporting the Nim math primitives with coercions
 method `+`*(a: Node, b: Node): Node {.inline,base.} =
@@ -1162,8 +1123,6 @@ method `eq`*(a: Blok, b: Node): Node {.inline.} =
 method `eq`*(a: Word, b: Node): Node {.inline.} =
   newValue(b of Word and (a.word == Word(b).word))
 
-method `eq`*(a, b: UndefVal): Node {.inline.} = TrueVal()
-method `eq`*(a: Node, b: UndefVal): Node {.inline.} = FalseVal()
 method `eq`*(a, b: NilVal): Node {.inline.} = TrueVal()
 method `eq`*(a: Node, b: NilVal): Node {.inline.} = FalseVal()
 
@@ -1232,6 +1191,14 @@ method lookup*(self: BlokActivation, key: Node): Binding =
   if self.locals.notNil:
     return self.locals.lookup(key)
 
+method contains*(self: Activation, key: Node): bool {.base.} =
+  # Base implementation needed for dynamic dispatch to work
+  nil
+
+method contains*(self: BlokActivation, key: Node): bool =
+  if self.locals.notNil:
+    return self.locals.contains(key)
+
 proc lookup*(spry: Interpreter, key: Node): Binding =
   ## Not sure why, but three methods didn't want to fly
   if (key of EvalModuleWord):
@@ -1279,12 +1246,17 @@ proc lookupParent(spry: Interpreter, key: Node): Binding =
     else:
       inParent = true
 
-
 method makeBinding(self: Activation, key, val: Node): Binding {.base.} =
   raiseRuntimeException("This activation should not be called with makeBinding")
 
 method makeBinding(self: BlokActivation, key, val: Node): Binding =
   self.getLocals().makeBinding(key, val)
+
+method assignBinding(self: Activation, key, val: Node): Binding {.base.} =
+  raiseRuntimeException("This activation should not be called with assignBinding")
+
+method assignBinding(self: BlokActivation, key, val: Node): Binding =
+  self.getLocals().assignBinding(key, val)
 
 
 method makeBindingInMap(spry: Interpreter, key, val: Node): Binding {.base.} =
@@ -1292,32 +1264,39 @@ method makeBindingInMap(spry: Interpreter, key, val: Node): Binding {.base.} =
   for activation in mapWalk(spry.currentActivation):
     return BlokActivation(activation).getLocals().makeBinding(key, val)
 
-method makeBindingInMap(spry: Interpreter, key: EvalOuterWord, val: Node): Binding =
-  # Bind in first activation with locals outside this one
-  # or where we find an existing binding.
-  var inParent = false
-  var fallback: Activation
-  for activation in mapWalk(spry.currentActivation):
-    if inParent:
-      fallback = activation
-      if activation.lookup(key).notNil:
-        return BlokActivation(activation).locals.makeBinding(newEvalWord(key.word), val)
-    else:
-      inParent = true
-  return BlokActivation(fallback).getLocals().makeBinding(newEvalWord(key.word), val)
-
 method makeBindingInMap(spry: Interpreter, key: EvalWord, val: Node): Binding =
   # Bind in first activation with locals
   for activation in mapWalk(spry.currentActivation):
     return BlokActivation(activation).getLocals().makeBinding(key, val)
 
 method makeBindingInMap(spry: Interpreter, key: EvalModuleWord, val: Node): Binding =
-  # Bind in module
+  # Bind in module, unless already bound
   let binding = spry.lookup(key.module)
   if binding.notNil:
     let module = binding.val
     if module.notNil:
       return Map(module).makeBinding(newEvalWord(key.word), val)
+
+method assignBindingInMap(spry: Interpreter, key, val: Node): Binding {.base.} =
+  # Bind in first activation with locals where we find an existing binding
+  for activation in mapWalk(spry.currentActivation):
+    if activation.contains(key):
+      return BlokActivation(activation).getLocals().assignBinding(key, val)
+
+method assignBindingInMap(spry: Interpreter, key: EvalWord, val: Node): Binding =
+  # Assign in first activation with locals where we find an existing binding
+  for activation in mapWalk(spry.currentActivation):
+    if activation.contains(key):
+      return BlokActivation(activation).getLocals().assignBinding(key, val)
+
+method assignBindingInMap(spry: Interpreter, key: EvalModuleWord, val: Node): Binding =
+  # Bind in module if binding exists
+  let binding = spry.lookup(key.module)
+  if binding.notNil:
+    let module = binding.val
+    if module.notNil:
+      if Map(module).contains(key):
+        return Map(module).assignBinding(newEvalWord(key.word), val)
 
 
 proc makeLocalBinding(spry: Interpreter, key: Node, val: Node): Binding =
@@ -1326,6 +1305,9 @@ proc makeLocalBinding(spry: Interpreter, key: Node, val: Node): Binding =
     return activation.makeBinding(key, val)
 
 proc assign*(spry: Interpreter, word: Node, val: Node) =
+  discard spry.assignBindingInMap(word, val)
+
+proc bindAndAssign*(spry: Interpreter, word: Node, val: Node) =
   discard spry.makeBindingInMap(word, val)
 
 proc argInfix*(spry: Interpreter): Node =
@@ -1344,7 +1326,7 @@ proc evalArgInfix*(spry: Interpreter): Node =
 
 proc self*(spry: Interpreter): Node =
   if spry.currentActivation.self.isNil:
-    spry.currentActivation.self = spry.undefVal
+    spry.currentActivation.self = spry.nilVal
   spry.currentActivation.self
 
 proc setSelf*(spry: Interpreter): Node =
@@ -1453,49 +1435,37 @@ method eval*(self: Word, spry: Interpreter): Node =
 method eval*(self: GetModuleWord, spry: Interpreter): Node =
   ## Look up only
   let hit = spry.lookup(self)
-  if hit.isNil: spry.undefVal else: hit.val
+  if hit.isNil: spry.nilVal else: hit.val
 
 method eval*(self: GetWord, spry: Interpreter): Node =
   ## Look up only
   let hit = spry.lookup(self)
-  if hit.isNil: spry.undefVal else: hit.val
+  if hit.isNil: spry.nilVal else: hit.val
 
 method eval*(self: GetSelfWord, spry: Interpreter): Node =
   ## Look up only
   let hit = spry.lookupSelf(self)
-  if hit.isNil: spry.undefVal else: hit.val
-
-method eval*(self: GetOuterWord, spry: Interpreter): Node =
-  ## Look up only
-  let hit = spry.lookupParent(self)
-  if hit.isNil: spry.undefVal else: hit.val
+  if hit.isNil: spry.nilVal else: hit.val
 
 method eval*(self: EvalModuleWord, spry: Interpreter): Node =
   ## Look up and eval
   let hit = spry.lookup(self)
-  if hit.isNil: spry.undefVal else: hit.val.eval(spry)
+  if hit.isNil: spry.nilVal else: hit.val.eval(spry)
 
 method eval*(self: EvalWord, spry: Interpreter): Node =
   ## Look up and eval
   let hit = spry.lookup(self)
-  if hit.isNil: spry.undefVal else: hit.val.eval(spry)
+  if hit.isNil: spry.nilVal else: hit.val.eval(spry)
 
 method eval*(self: EvalSelfWord, spry: Interpreter): Node =
   ## Look up and eval
   let hit = spry.lookupSelf(self)
-  if hit.isNil: spry.undefVal else: hit.val.eval(spry)
-
-method eval*(self: EvalOuterWord, spry: Interpreter): Node =
-  ## Look up and eval, from parent outwards
-  let hit = spry.lookupParent(self)
-  if hit.isNil: spry.undefVal else: hit.val.eval(spry)
-
-method eval*(self: EvalLocalWord, spry: Interpreter): Node =
-  ## Look up and eval, only in current activation
-  let hit = spry.currentActivation.lookup(self)
-  if hit.isNil: spry.undefVal else: hit.val.eval(spry)
+  if hit.isNil: spry.nilVal else: hit.val.eval(spry)
 
 method eval*(self: LitWord, spry: Interpreter): Node =
+  self
+
+method eval*(self: Activation, spry: Interpreter): Node =
   self
 
 method eval*(self: EvalArgWord, spry: Interpreter): Node =
@@ -1515,7 +1485,7 @@ method eval*(self: GetArgWord, spry: Interpreter): Node =
 method eval*(self: PrimFunc, spry: Interpreter): Node =
   self.primitive(spry)
 
-proc eval*(current: Activation, spry: Interpreter): Node =
+proc evalActivation*(current: Activation, spry: Interpreter): Node =
   ## This is the inner chamber of the heart :)
   spry.pushActivation(current)
   # debug(current)
@@ -1543,19 +1513,19 @@ proc eval*(current: Activation, spry: Interpreter): Node =
   return current.last
 
 method eval*(self: Funk, spry: Interpreter): Node =
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 method eval*(self: Meth, spry: Interpreter): Node =
   let act = newActivation(self)
   discard setSelf(spry)
-  act.eval(spry)
+  act.evalActivation(spry)
 
 method eval*(self: Paren, spry: Interpreter): Node =
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 method eval*(self: Curly, spry: Interpreter): Node =
   let activation = newActivation(self)
-  discard activation.eval(spry)
+  discard activation.evalActivation(spry)
   activation.returned = true
   return activation.locals
 
@@ -1576,17 +1546,17 @@ method evalDo(self: Node, spry: Interpreter): Node =
   raiseRuntimeException("Do only works for sequences")
 
 method evalDo(self: Funk, spry: Interpreter): Node =
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 method evalDo(self: Blok, spry: Interpreter): Node =
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 method evalDo(self: Paren, spry: Interpreter): Node =
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 method evalDo(self: Curly, spry: Interpreter): Node =
   # Calling do on a curly doesn't do the locals trick
-  newActivation(self).eval(spry)
+  newActivation(self).evalActivation(spry)
 
 
 proc eval*(spry: Interpreter, code: string): Node =
@@ -1600,7 +1570,7 @@ proc evalRootDo*(self: Blok, spry: Interpreter): Node =
   spry.rootActivation.body = self
   spry.rootActivation.pos = 0
   # This will push it back and... pop it too afterwards
-  result = spry.rootActivation.eval(spry)
+  result = spry.rootActivation.evalActivation(spry)
   # ...so we need to put it back again
   spry.pushActivation(spry.rootActivation)
 
@@ -1622,7 +1592,6 @@ proc newInterpreter*(): Interpreter =
   spry.trueVal = newValue(true)
   spry.falseVal = newValue(false)
   spry.nilVal = newNilVal()
-  spry.undefVal = newUndefVal()
   spry.emptyBlok = newBlok()
   spry.objectTag = spry.newLitWord("object")
   spry.moduleTag = spry.newLitWord("module")
@@ -1630,7 +1599,6 @@ proc newInterpreter*(): Interpreter =
 
   spry.makeWord("false", spry.falseVal)
   spry.makeWord("true", spry.trueVal)
-  spry.makeWord("undef", spry.undefVal)
   spry.makeWord("nil", spry.nilVal)
   spry.makeWord("modules", spry.modules)
 

@@ -16,7 +16,7 @@ proc toByDo(frm, to, by: int, fn: Blok, self: Node, spry: Interpreter): Node =
     for i in countdown(frm, to, abs(by)):
       current.body.nodes[0] = newValue(i)
       # evalDo will increase pos, but we set it back below
-      result = activation.eval(spry)
+      result = activation.evalActivation(spry)
       activation.reset()
       current.pos = 0
       # Or else non local returns don't work :)
@@ -29,7 +29,7 @@ proc toByDo(frm, to, by: int, fn: Blok, self: Node, spry: Interpreter): Node =
     for i in countup(frm, to, by):
       current.body.nodes[0] = newValue(i)
       # evalDo will increase pos, but we set it back below
-      result = activation.eval(spry)
+      result = activation.evalActivation(spry)
       activation.reset()
       current.pos = 0
       # Or else non local returns don't work :)
@@ -56,10 +56,76 @@ proc addCore*(spry: Interpreter) =
   nimFunc("activation"):
     spry.currentActivation
 
-  # Access to closest scope
-  nimFunc("locals"):
+  # Access to nearest BlokActivation
+  nimFunc("blockActivation"):
     for activation in mapWalk(spry.currentActivation):
-      return BlokActivation(activation).getLocals()
+      return BlokActivation(activation)
+
+  # Set catcher of given activation
+  nimMeth("catcher:"):
+    let act = evalArgInfix(spry)
+    let blk = evalArg(spry)
+    if act of Activation:
+      if blk of SeqComposite:
+        Activation(act).catcher = SeqComposite(blk)
+
+  # Set catcher of current activation
+  nimFunc("catch:"):
+    let blk = evalArg(spry)
+    if blk of SeqComposite:
+      spry.currentActivation.catcher = SeqComposite(blk)
+
+  # Throw zero or more arguments up caller chain
+  nimFunc("throw"):
+    var current = spry.currentActivation
+    # First skip over immediate paren activations
+    while current.isParenActivation:
+      current = current.parent
+    if current.catcher.notNil:
+      return current.catcher.evalDo(spry)
+    for activation in callerWalk(current):
+      if activation.catcher.notNil:
+        return activation.catcher.evalDo(spry)
+    # Panic exit - should normally not reach here since root activation should have a catcher
+    let node = evalArg(spry)
+    if node of IntVal:
+      quit(IntVal(node).value)
+    else:
+      quit(1)
+
+  # Get locals of activation
+  nimMeth("locals"):
+    let node = evalArgInfix(spry)
+    if node of BlokActivation:
+      return BlokActivation(node).getLocals()
+    else:
+      return spry.nilVal
+
+  # Get outer Activation, follows lexical parent if
+  nimMeth("outer"):
+    let node = evalArgInfix(spry)
+    if node of Activation:
+      for activation in outerWalk(Activation(node)):
+        return activation# return Activation(node).outer()
+    else:
+      return spry.nilVal
+
+  # Get caller Activation, skips paren activations
+  nimMeth("caller"):
+    let node = evalArgInfix(spry)
+    if node of Activation:
+      for activation in callerWalk(Activation(node)):
+        return activation
+    else:
+      return spry.nilVal
+
+  # Get parent Activation
+  nimMeth("parent"):
+    let node = evalArgInfix(spry)
+    if node of Activation:
+      return Activation(node).parent
+    else:
+      return spry.nilVal
 
   # Access to self
   nimFunc("node"):
@@ -107,10 +173,13 @@ proc addCore*(spry: Interpreter) =
   # Assignment and tests
   nimMeth("="):
     result = evalArg(spry) # Perhaps we could make it eager here? Pulling in more?
+    spry.bindAndAssign(argInfix(spry), result)
+  nimMeth(":="):
+    result = evalArg(spry) # Perhaps we could make it eager here? Pulling in more?
     spry.assign(argInfix(spry), result)
   nimMeth("set:"):
     result = evalArg(spry)
-    spry.assign(evalArgInfix(spry), result)
+    spry.bindAndAssign(evalArgInfix(spry), result)
   nimMeth("set?"):
     let binding = spry.lookup(argInfix(spry))
     if binding.isNil:
@@ -118,8 +187,6 @@ proc addCore*(spry: Interpreter) =
     return spry.trueVal
   nimMeth("nil?"):
     newValue(evalArgInfix(spry) of NilVal)
-  nimMeth("undef?"):
-    newValue(evalArgInfix(spry) of UndefVal)
 
   # Arithmetic
   nimMeth("+"):  evalArgInfix(spry) + evalArg(spry)
@@ -219,7 +286,7 @@ proc addCore*(spry: Interpreter) =
       return SeqComposite(comp)[evalArg(spry)]
     elif comp of Map:
       let hit = Map(comp)[evalArg(spry)]
-      if hit.isNil: return spry.undefVal else: return hit
+      if hit.isNil: return spry.nilVal else: return hit
   nimMeth("at:put:"):
     let comp = evalArgInfix(spry)
     let key = evalArg(spry)
@@ -233,7 +300,7 @@ proc addCore*(spry: Interpreter) =
     let comp = evalArgInfix(spry)
     let word = arg(spry)
     let hit = Map(comp)[word]
-    if hit.isNil: spry.undefVal else: hit
+    if hit.isNil: spry.nilVal else: hit
   nimMeth("set:to:"):
     let comp = Map(evalArgInfix(spry))
     let word = arg(spry)
@@ -299,7 +366,7 @@ proc addCore*(spry: Interpreter) =
     for each in blk1.nodes:
       current.body.nodes[0] = each
       # evalDo will increase pos, but we set it back below
-      result = activation.eval(spry)
+      result = activation.evalActivation(spry)
       activation.reset()
       # Or else non local returns don't work :)
       if current.returned:
