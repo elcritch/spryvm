@@ -6,10 +6,10 @@ import spryblocktest
 import spryootest
 import spryiotest
 import spryostest
-import spryreflecttest
-import sprycompresstest
-import sprymemfiletest
+#import spryreflecttest
+#import sprycompresstest
+#import sprymemfiletest
 import spryextendtest
 import spryjsontest
-import sprysqlitetest
-import spryrocksdbtest
+#import sprysqlitetest
+#import spryrocksdbtest
