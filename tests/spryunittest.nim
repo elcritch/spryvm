@@ -1,8 +1,10 @@
 import spryvm
 
 # Some helpers for testing
-template show*(code: string): string =
-  $newParser().parse(code)
+template show*(cd: string): string =
+  (proc(code: string): string = 
+    var nd = newParser().parse(code)
+    result = $nd)(cd)
 template identical*(code: string): bool =
   code == $newParser().parse(code)
 template isolate*(code: string): string {.dirty.} =

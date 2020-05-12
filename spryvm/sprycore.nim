@@ -57,12 +57,17 @@ proc addCore*(spry: Interpreter) =
     spry.currentActivation
 
   # Set catcher of given activation
-  nimMeth("catch:"):
-    let act = evalArgInfix(spry)
-    let blk = evalArg(spry)
-    if act of Activation:
-      if blk of Blok:
-        Activation(act).catcher = Blok(blk)
+  # nimMeth("catch:"):
+  #   let act = evalArgInfix(spry)
+  #   let blk = evalArg(spry)
+  #   result = nil
+  #   if act of Activation:
+  #     if blk of Blok:
+  #       var act1 = Activation(act)
+  #       var blk1 = Blok(blk)
+  #       act1.catcher = blk1
+  #       return act1
+
 
   # Throw zero or more arguments up caller chain
   nimFunc("throw"):

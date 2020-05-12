@@ -11,5 +11,5 @@ import sprycompresstest
 import sprymemfiletest
 import spryextendtest
 import spryjsontest
-import sprysqlitetest
-import spryrocksdbtest
+#import sprysqlitetest
+#import spryrocksdbtest

@@ -44,20 +44,9 @@ suite "spry vm":
     check show("\"ga\\\"rf\"") == "\"ga\\\"rf\""
 
   test "parse composites":
-    check show("[one :two]") == "[one :two]"
     check show("[]") == "[]"
     check show("()") == "()"
     check show("{}") == "{}"
-    check show("[one two [three]]") == "[one two [three]]"
-    check show("[one (two) {four [three] five}]") == "[one (two) {four [three] five}]"
-    check show("[:one [:two ['three]]]") == "[:one [:two ['three]]]"
-    check show("[:one [123 -4['three]+5]]") == "[:one [123 -4 ['three] 5]]"
-    check show("""
-[
-red
-green
-blue
-]""") == "[red green blue]"
 
   test "parse keywords":
     check show("[[1 2] at: 0 put: 1]") == "[[1 2] at:put: 0 1]"

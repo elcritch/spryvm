@@ -1,0 +1,14 @@
+=sink	eqsink___S9cYA0MoS9cfrWcBTMaQ9a1hw	/Volumes/datastore/projects/pt/third-party/spryvm/spryvm/spryvm.nim	547	15
+some	some__CxbVJ9cqvyc5uz0Ex4RuIKw	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	101	5
+result	result	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	101	0
+none	none__sxVpCqMBELxuy9cW9boFAqHw	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	124	5
+result	result	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	124	0
+isSome	isSome__SBpZC5L2ngoUiy0hnfoIYQoptions	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	143	5
+get	get__eQXNxbd7p8ioGVwnVuXFFQ	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	170	5
+result	result	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	170	0
+isNone	isNone__SBpZC5L2ngoUiy0hnfoIYQ_2options	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	157	5
+self	self	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	157	16
+result	result	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	157	0
+=destroy	eqdestroy___A0WfCorq86FTzHcRt3nkKw	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	185	22
+dest	dest	/Users/elcritch/.asdf/installs/nim/devel/lib/pure/options.nim	185	22
+=destroy	eqdestroy___JCKcLoA6Gnt2zObZo2NOYA	/Volumes/datastore/projects/pt/third-party/spryvm/spryvm/spryvm.nim	547	15

@@ -403,7 +403,9 @@ proc newGetArgWord*(s: string): GetArgWord =
   GetArgWord(word: s)
 
 proc newKeyWord*(): KeyWord =
-  KeyWord(keys: newSeq[string](), args: newSeq[Node]())
+  var keys = newSeq[string]()
+  var args = newSeq[Node]()
+  KeyWord(keys: keys, args: args)
 
 proc newBlok*(nodes: seq[Node]): Blok =
   Blok(nodes: nodes)
@@ -578,8 +580,9 @@ template top(self: Parser): Node =
 
 proc currentKeyword(self: Parser): KeyWord =
   # If there is a KeyWord on the stack return it, otherwise nil
-  if self.top of KeyWord:
-    return KeyWord(self.top)
+  var curr = self.stack[self.stack.high]
+  if curr of KeyWord:
+    return KeyWord(curr)
   else:
     return nil
 
@@ -591,9 +594,14 @@ proc closeKeyword(self: Parser) =
   SeqComposite(self.top).add(nodes)
 
 proc pop(self: Parser): Node =
+  echo "POP:currentKeyword"
   if self.currentKeyword().notNil:
+    echo "POP:closeKeyword"
     self.closeKeyword()
-  self.stack.pop()
+  echo "POP:pop"
+  var item = self.stack.pop()
+  echo "POP:item: " & repr(item)
+  return item
 
 proc doAddNode(self: Parser, node: Node) =
   # If we are collecting a keyword, we get nil until its ready
@@ -788,8 +796,11 @@ proc parse*(self: Parser, str: string): Node =
               discard self.pop
             # Block
             of ']':
+              echo "close ] addNode"
               self.addNode()
+              echo "close ] pop"
               discard self.pop
+              echo "close ] donePop"
             # Curly
             of '}':
               self.addNode()
@@ -1587,7 +1598,7 @@ proc newInterpreter*(): Interpreter =
 
 when isMainModule and not defined(js):
   # Just run a given file as argument, the hash-bang trick works also
-  import os
+  # import os
   let fn = commandLineParams()[0]
   let code = readFile(fn)
   discard newInterpreter().eval("[" & code & "]")
